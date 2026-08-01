@@ -17,6 +17,13 @@ export interface JourneyResponse {
   };
   position: { lat: number; lng: number; bearing: number } | null;
   progress: { distanceCoveredKm: number; distanceTotalKm: number; percentComplete: number };
+  route: Array<{
+    stationCode: string;
+    stationName: string;
+    lat: number;
+    lng: number;
+    distanceKm: number;
+  }>;
 }
 
 export async function searchTrains(query: string): Promise<TrainSearchResult[]> {

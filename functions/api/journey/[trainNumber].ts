@@ -113,6 +113,15 @@ function buildPayload(trainNumber: string, raw: RailRadarLiveData) {
       distanceTotalKm,
       percentComplete: round(percentComplete),
     },
+    route: route
+      .filter((r) => typeof r.lat === 'number' && typeof r.lng === 'number')
+      .map((r) => ({
+        stationCode: r.stationCode,
+        stationName: r.stationName,
+        lat: r.lat as number,
+        lng: r.lng as number,
+        distanceKm: r.distance,
+      })),
   };
 }
 

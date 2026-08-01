@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchJourney } from '../services/trainService';
+import JourneyMap from '../components/JourneyMap';
 
 function delayPillClass(delayMinutes: number) {
   if (delayMinutes <= 0) return 'pill--onTime';
@@ -35,6 +36,13 @@ export default function Journey() {
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', padding: '32px 20px' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
+        <JourneyMap
+          route={data.route}
+          position={data.position}
+          distanceCoveredKm={data.progress.distanceCoveredKm}
+        />
+      </div>
       <div className="card">
         <h2 style={{ margin: 0 }}>
           {data.train.number} — {data.train.name}
