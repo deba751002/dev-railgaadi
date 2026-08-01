@@ -165,7 +165,19 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   const body: any = await upstream.json();
   const raw: RailRadarLiveData = body.data ?? body;
-  const payload = buildPayload(trainNumber, raw);
+  const payload: any = buildPayload(trainNumber, raw);
+
+  if (!payload.route.length) {
+    // TEMPORARY DEBUG — remove once route/coordinate field names are confirmed.
+    payload.debug = {
+      rawTopLevelKeys: Object.keys(raw),
+      rawRouteSample: Array.isArray((raw as any).route)
+        ? (raw as any).route.slice(0, 2)
+        : (raw as any).route ?? 'route field missing entirely',
+      rawPreviousHalt: raw.previousHalt,
+      rawNextHalt: raw.nextHalt,
+    };
+  }
 
   if (context.env.RAILGAADI_CACHE) {
     // 10-minute cache — RailRadar's free tier caps at 50 requests/day, so
