@@ -1,8 +1,6 @@
 export interface TrainSearchResult {
   trainNumber: string;
   name: string;
-  origin: string;
-  destination: string;
 }
 
 export type TrainRunState = 'SCHEDULED' | 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'NO_DATA';

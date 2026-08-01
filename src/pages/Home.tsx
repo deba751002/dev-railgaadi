@@ -34,9 +34,6 @@ export default function Home() {
             onClick={() => navigate(`/journey/${train.trainNumber}`)}
           >
             <strong>{train.trainNumber}</strong> — {train.name}
-            <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-              {train.origin} → {train.destination}
-            </div>
           </div>
         ))}
         {query.trim().length >= 2 && !isFetching && results?.length === 0 && (
