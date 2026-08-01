@@ -1,6 +1,7 @@
 .env
 node_modules/
 dist/
+*.tsbuildinfo
 .wrangler/
 android/app/build/
 android/.gradle/
