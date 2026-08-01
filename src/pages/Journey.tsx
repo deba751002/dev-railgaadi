@@ -38,9 +38,9 @@ export default function Journey() {
     <div style={{ maxWidth: 640, margin: '0 auto', padding: '32px 20px' }}>
       <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
         <JourneyMap
-          route={data.route}
-          position={data.position}
-          distanceCoveredKm={data.progress.distanceCoveredKm}
+          route={data.route ?? []}
+          position={data.position ?? null}
+          distanceCoveredKm={data.progress?.distanceCoveredKm ?? 0}
         />
       </div>
       <div className="card">
