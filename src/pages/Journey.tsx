@@ -11,11 +11,14 @@ function delayPillClass(delayMinutes: number) {
 export default function Journey() {
   const { trainNumber } = useParams<{ trainNumber: string }>();
 
-  const { data, isLoading, isError, dataUpdatedAt } = useQuery({
+  const { data, isLoading, isFetching, isError, dataUpdatedAt, refetch } = useQuery({
     queryKey: ['journey', trainNumber],
     queryFn: () => fetchJourney(trainNumber!),
     enabled: !!trainNumber,
-    refetchInterval: 30_000,
+    // No auto-refresh: RailRadar's free tier caps at 50 requests/day, so
+    // refreshing is user-initiated instead of polling every 30s. The
+    // response is also cached 10 min server-side, so a manual refresh
+    // within that window won't cost an extra upstream call either.
   });
 
   if (isLoading) {
@@ -55,6 +58,23 @@ export default function Journey() {
           Last updated: {new Date(data.status.lastUpdated).toLocaleTimeString()} · refreshed{' '}
           {new Date(dataUpdatedAt).toLocaleTimeString()}
         </p>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          style={{
+            marginTop: 8,
+            padding: '10px 20px',
+            borderRadius: 999,
+            border: 'none',
+            background: 'var(--accent-primary)',
+            color: '#fff',
+            fontWeight: 600,
+            cursor: isFetching ? 'default' : 'pointer',
+            opacity: isFetching ? 0.6 : 1,
+          }}
+        >
+          {isFetching ? 'Refreshing…' : 'Refresh status'}
+        </button>
       </div>
     </div>
   );
