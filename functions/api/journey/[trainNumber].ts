@@ -3,12 +3,16 @@ interface Env {
   RAILGAADI_CACHE?: KVNamespace;
 }
 
-interface RailRadarRouteStop {
+interface RailRadarLiveRouteStop {
+  sequence: number;
   stationCode: string;
   stationName: string;
-  lat?: number;
-  lng?: number;
   distance: number;
+  scheduledArrival?: string;
+  scheduledDeparture?: string;
+  delayArrival?: number;
+  delayDeparture?: number;
+  status?: string;
 }
 
 interface RailRadarHalt {
@@ -25,17 +29,24 @@ interface RailRadarLiveData {
   lastUpdatedAt: string;
   status: string;
   delayMinutes: number;
+  isLive?: boolean;
   currentLocation?: {
-    stationCode: string;
-    sequence: number;
-    status: string;
-    segmentProgress: number;
+    stationCode?: string;
+    segmentProgress?: number;
     speedKmh?: number;
     bearingDegrees?: number;
   };
   previousHalt?: RailRadarHalt;
   nextHalt?: RailRadarHalt;
-  route?: RailRadarRouteStop[];
+  route?: RailRadarLiveRouteStop[];
+}
+
+interface RailRadarGeometryStop {
+  sequence: number;
+  code: string;
+  name: string;
+  lat: number;
+  lng: number;
 }
 
 type TrainRunState = 'SCHEDULED' | 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'NO_DATA';
@@ -45,7 +56,7 @@ function mapState(status: string | undefined): TrainRunState {
   if (v.includes('run')) return 'RUNNING';
   if (v.includes('complet') || v.includes('arriv')) return 'COMPLETED';
   if (v.includes('cancel')) return 'CANCELLED';
-  if (v.includes('sched') || v.includes('not start')) return 'SCHEDULED';
+  if (v.includes('sched') || v.includes('not start') || v === 'no_data') return 'SCHEDULED';
   return 'NO_DATA';
 }
 
@@ -54,44 +65,114 @@ function round(n: number, decimals = 1) {
   return Math.round(n * f) / f;
 }
 
-function buildPayload(trainNumber: string, raw: RailRadarLiveData) {
-  const route = raw.route ?? [];
-  const previousHalt = raw.previousHalt;
+const GEOMETRY_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days — route geometry never changes
+
+async function getRouteGeometry(
+  trainNumber: string,
+  env: Env,
+): Promise<RailRadarGeometryStop[]> {
+  const cacheKey = `routeGeometry:${trainNumber}`;
+
+  if (env.RAILGAADI_CACHE) {
+    const cached = await env.RAILGAADI_CACHE.get<RailRadarGeometryStop[]>(cacheKey, 'json');
+    if (cached) return cached;
+  }
+
+  const upstream = await fetch(
+    `https://api.railradar.in/v1/trains/${encodeURIComponent(trainNumber)}/route?format=geojson&stops=true`,
+    { headers: { Authorization: `Bearer ${env.RAILRADAR_API_KEY}` } },
+  );
+
+  if (!upstream.ok) {
+    // Degrade gracefully: no coordinates, map hides itself client-side.
+    return [];
+  }
+
+  const body: any = await upstream.json();
+  const stops: RailRadarGeometryStop[] = body.data?.stops ?? [];
+
+  if (env.RAILGAADI_CACHE && stops.length) {
+    await env.RAILGAADI_CACHE.put(cacheKey, JSON.stringify(stops), {
+      expirationTtl: GEOMETRY_CACHE_TTL_SECONDS,
+    });
+  }
+
+  return stops;
+}
+
+function buildPayload(
+  trainNumber: string,
+  raw: RailRadarLiveData,
+  geometryStops: RailRadarGeometryStop[],
+) {
+  const liveRoute = raw.route ?? [];
+  const geometryByCode = new Map(geometryStops.map((s) => [s.code, s]));
+
+  // The live endpoint doesn't always include "previousHalt" (e.g. before a
+  // train departs its origin) — fall back to matching currentLocation's
+  // station, then to previousHalt if RailRadar does send it.
+  const currentEntry =
+    liveRoute.find((r) => r.stationCode === raw.currentLocation?.stationCode) ??
+    (raw.previousHalt
+      ? liveRoute.find((r) => r.stationCode === raw.previousHalt!.stationCode)
+      : undefined);
+
   const nextHalt = raw.nextHalt;
   const segmentProgress = raw.currentLocation?.segmentProgress ?? 0;
 
-  const prevDistance = previousHalt?.distance ?? 0;
+  const prevDistance = currentEntry?.distance ?? raw.previousHalt?.distance ?? 0;
   const nextDistance = nextHalt?.distance ?? prevDistance;
-  const distanceTotalKm = route.length ? route[route.length - 1].distance : nextDistance;
+  const distanceTotalKm = liveRoute.length
+    ? liveRoute[liveRoute.length - 1].distance
+    : nextDistance;
   const distanceCoveredKm = prevDistance + segmentProgress * (nextDistance - prevDistance);
   const percentComplete = distanceTotalKm > 0 ? (distanceCoveredKm / distanceTotalKm) * 100 : 0;
 
-  const prevStation = route.find((r) => r.stationCode === previousHalt?.stationCode);
-  const nextStation = route.find((r) => r.stationCode === nextHalt?.stationCode);
+  const prevGeo = currentEntry ? geometryByCode.get(currentEntry.stationCode) : undefined;
+  const nextGeo = nextHalt ? geometryByCode.get(nextHalt.stationCode) : undefined;
 
   let position: { lat: number; lng: number; bearing: number } | null = null;
-  if (
-    prevStation &&
-    nextStation &&
-    typeof prevStation.lat === 'number' &&
-    typeof nextStation.lat === 'number' &&
-    typeof prevStation.lng === 'number' &&
-    typeof nextStation.lng === 'number'
-  ) {
+  if (prevGeo && nextGeo) {
     position = {
-      lat: prevStation.lat + segmentProgress * (nextStation.lat - prevStation.lat),
-      lng: prevStation.lng + segmentProgress * (nextStation.lng - prevStation.lng),
+      lat: prevGeo.lat + segmentProgress * (nextGeo.lat - prevGeo.lat),
+      lng: prevGeo.lng + segmentProgress * (nextGeo.lng - prevGeo.lng),
       bearing: raw.currentLocation?.bearingDegrees ?? 0,
     };
+  } else if (prevGeo) {
+    position = { lat: prevGeo.lat, lng: prevGeo.lng, bearing: 0 };
   }
 
+  // ETA from RailRadar's own scheduled time + delay for the next stop, rather
+  // than a speed-based guess — far more accurate when the data is present.
   let etaNextStation: string | null = null;
-  const speed = raw.currentLocation?.speedKmh;
-  if (speed && speed > 0 && nextDistance > distanceCoveredKm) {
-    const remainingKm = nextDistance - distanceCoveredKm;
-    const hours = remainingKm / speed;
-    etaNextStation = new Date(Date.now() + hours * 3_600_000).toISOString();
+  const nextRouteEntry = nextHalt
+    ? liveRoute.find((r) => r.stationCode === nextHalt.stationCode)
+    : undefined;
+  if (nextRouteEntry?.scheduledArrival) {
+    const delay = nextRouteEntry.delayArrival ?? nextRouteEntry.delayDeparture ?? raw.delayMinutes ?? 0;
+    etaNextStation = new Date(
+      new Date(nextRouteEntry.scheduledArrival).getTime() + delay * 60_000,
+    ).toISOString();
+  } else if (nextRouteEntry?.scheduledDeparture) {
+    const delay = nextRouteEntry.delayDeparture ?? raw.delayMinutes ?? 0;
+    etaNextStation = new Date(
+      new Date(nextRouteEntry.scheduledDeparture).getTime() + delay * 60_000,
+    ).toISOString();
   }
+
+  const route = liveRoute
+    .map((r) => {
+      const geo = geometryByCode.get(r.stationCode);
+      if (!geo) return null;
+      return {
+        stationCode: r.stationCode,
+        stationName: r.stationName ?? geo.name,
+        lat: geo.lat,
+        lng: geo.lng,
+        distanceKm: r.distance,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 
   return {
     train: {
@@ -102,7 +183,7 @@ function buildPayload(trainNumber: string, raw: RailRadarLiveData) {
     status: {
       state: mapState(raw.status),
       delayMinutes: raw.delayMinutes ?? 0,
-      currentStation: previousHalt?.stationName ?? null,
+      currentStation: currentEntry?.stationName ?? raw.previousHalt?.stationName ?? null,
       nextStation: nextHalt?.stationName ?? null,
       etaNextStation,
       lastUpdated: raw.lastUpdatedAt ?? new Date().toISOString(),
@@ -113,15 +194,7 @@ function buildPayload(trainNumber: string, raw: RailRadarLiveData) {
       distanceTotalKm,
       percentComplete: round(percentComplete),
     },
-    route: route
-      .filter((r) => typeof r.lat === 'number' && typeof r.lng === 'number')
-      .map((r) => ({
-        stationCode: r.stationCode,
-        stationName: r.stationName,
-        lat: r.lat as number,
-        lng: r.lng as number,
-        distanceKm: r.distance,
-      })),
+    route,
   };
 }
 
@@ -165,19 +238,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   const body: any = await upstream.json();
   const raw: RailRadarLiveData = body.data ?? body;
-  const payload: any = buildPayload(trainNumber, raw);
-
-  if (!payload.route.length) {
-    // TEMPORARY DEBUG — remove once route/coordinate field names are confirmed.
-    payload.debug = {
-      rawTopLevelKeys: Object.keys(raw),
-      rawRouteSample: Array.isArray((raw as any).route)
-        ? (raw as any).route.slice(0, 2)
-        : (raw as any).route ?? 'route field missing entirely',
-      rawPreviousHalt: raw.previousHalt,
-      rawNextHalt: raw.nextHalt,
-    };
-  }
+  const geometryStops = await getRouteGeometry(trainNumber, context.env);
+  const payload = buildPayload(trainNumber, raw, geometryStops);
 
   if (context.env.RAILGAADI_CACHE) {
     // 10-minute cache — RailRadar's free tier caps at 50 requests/day, so
