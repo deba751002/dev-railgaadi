@@ -161,18 +161,21 @@ function buildPayload(
     ).toISOString();
   }
 
+  function computeHaltMinutes(r: RailRadarLiveRouteStop): number | null {
+    if (!r.scheduledArrival || !r.scheduledDeparture) return null;
+    const mins = Math.round(
+      (new Date(r.scheduledDeparture).getTime() - new Date(r.scheduledArrival).getTime()) /
+        60_000,
+    );
+    return mins > 0 ? mins : null;
+  }
+
+  // Map-specific route: only stations we have coordinates for (needs the
+  // separate route-geometry call, so can be empty if that fails/degrades).
   const route = liveRoute
     .map((r) => {
       const geo = geometryByCode.get(r.stationCode);
       if (!geo) return null;
-      const haltMinutes =
-        r.scheduledArrival && r.scheduledDeparture
-          ? Math.round(
-              (new Date(r.scheduledDeparture).getTime() -
-                new Date(r.scheduledArrival).getTime()) /
-                60_000,
-            )
-          : null;
       return {
         stationCode: r.stationCode,
         stationName: r.stationName ?? geo.name,
@@ -182,10 +185,27 @@ function buildPayload(
         isHalt: r.isHalt ?? false,
         arrivalTime: r.scheduledArrival ?? null,
         departureTime: r.scheduledDeparture ?? null,
-        haltMinutes: haltMinutes !== null && haltMinutes > 0 ? haltMinutes : null,
+        haltMinutes: computeHaltMinutes(r),
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  // Station-list timeline: every station RailRadar's live endpoint knows
+  // about, independent of whether coordinates were available — this is what
+  // powers the station-by-station list view, and never degrades just
+  // because the map's geometry lookup failed.
+  const timeline = liveRoute.map((r) => ({
+    stationCode: r.stationCode,
+    stationName: r.stationName,
+    distanceKm: r.distance,
+    isHalt: r.isHalt ?? false,
+    status: r.status ?? null,
+    scheduledArrival: r.scheduledArrival ?? null,
+    scheduledDeparture: r.scheduledDeparture ?? null,
+    delayArrivalMinutes: r.delayArrival ?? null,
+    delayDepartureMinutes: r.delayDeparture ?? null,
+    haltMinutes: computeHaltMinutes(r),
+  }));
 
   return {
     train: {
@@ -208,6 +228,7 @@ function buildPayload(
       percentComplete: round(percentComplete),
     },
     route,
+    timeline,
   };
 }
 

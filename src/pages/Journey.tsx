@@ -2,6 +2,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchJourney } from '../services/trainService';
 import JourneyMap from '../components/JourneyMap';
+import StationTimeline from '../components/StationTimeline';
 
 function delayPillClass(delayMinutes: number) {
   if (delayMinutes <= 0) return 'pill--onTime';
@@ -83,6 +84,14 @@ export default function Journey() {
         >
           {isFetching ? 'Refreshing…' : 'Refresh status'}
         </button>
+      </div>
+      <div className="card" style={{ marginTop: 16 }}>
+        <h3 style={{ margin: '0 0 8px' }}>Station Schedule</h3>
+        <StationTimeline
+          timeline={data.timeline ?? []}
+          currentStation={data.status.currentStation}
+          distanceCoveredKm={data.progress?.distanceCoveredKm ?? 0}
+        />
       </div>
     </div>
   );

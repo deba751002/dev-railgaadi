@@ -28,6 +28,18 @@ export interface JourneyResponse {
     departureTime: string | null;
     haltMinutes: number | null;
   }>;
+  timeline: Array<{
+    stationCode: string;
+    stationName: string;
+    distanceKm: number;
+    isHalt: boolean;
+    status: string | null;
+    scheduledArrival: string | null;
+    scheduledDeparture: string | null;
+    delayArrivalMinutes: number | null;
+    delayDepartureMinutes: number | null;
+    haltMinutes: number | null;
+  }>;
 }
 
 export async function searchTrains(query: string): Promise<TrainSearchResult[]> {
