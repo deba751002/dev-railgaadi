@@ -64,9 +64,21 @@ function StationInput({
   );
 }
 
+function formatDuration(minutes: number | null) {
+  if (minutes === null) return '—';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function BetweenStations() {
   const [from, setFrom] = useState<StationSearchResult | null>(null);
   const [to, setTo] = useState<StationSearchResult | null>(null);
+  const [date, setDate] = useState(todayISO());
   const navigate = useNavigate();
 
   const {
@@ -75,8 +87,8 @@ export default function BetweenStations() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ['trainsBetween', from?.code, to?.code],
-    queryFn: () => fetchTrainsBetween(from!.code, to!.code),
+    queryKey: ['trainsBetween', from?.code, to?.code, date],
+    queryFn: () => fetchTrainsBetween(from!.code, to!.code, date),
     enabled: false,
   });
 
@@ -86,6 +98,17 @@ export default function BetweenStations() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <StationInput label="From station" value={from} onSelect={setFrom} />
         <StationInput label="To station" value={to} onSelect={setTo} />
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
+            Departure date
+          </div>
+          <input
+            type="date"
+            className="search-bar"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </div>
         <button
           disabled={!from || !to || isFetching}
           onClick={() => refetch()}
@@ -131,8 +154,11 @@ export default function BetweenStations() {
                 )}
               </div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
-                {t.departure ?? '—'} → {t.arrival ?? '—'} · {t.haltsBetween} stops between ·{' '}
-                {t.distanceKm ?? '—'} km
+                {t.departure ?? '—'} → {t.arrival ?? '—'} ({formatDuration(t.durationMinutes)})
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                {t.distanceKm ?? '—'} km · {t.haltsBetween} halt{t.haltsBetween !== 1 ? 's' : ''} in
+                between
               </div>
             </div>
           ))}

@@ -40,6 +40,7 @@ export interface JourneyResponse {
     delayDepartureMinutes: number | null;
     haltMinutes: number | null;
   }>;
+  coachPositions: string[];
 }
 
 export async function searchTrains(query: string): Promise<TrainSearchResult[]> {
@@ -91,9 +92,11 @@ export interface TrainsBetweenResponse {
 export async function fetchTrainsBetween(
   fromCode: string,
   toCode: string,
+  date?: string,
 ): Promise<TrainsBetweenResponse> {
+  const qs = date ? `?date=${encodeURIComponent(date)}` : '';
   const res = await fetch(
-    `/api/trains/between/${encodeURIComponent(fromCode)}/${encodeURIComponent(toCode)}`,
+    `/api/trains/between/${encodeURIComponent(fromCode)}/${encodeURIComponent(toCode)}${qs}`,
   );
   if (!res.ok) throw new Error('trains_between_failed');
   return res.json();

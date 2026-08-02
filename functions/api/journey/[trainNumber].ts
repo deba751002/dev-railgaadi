@@ -101,6 +101,35 @@ async function getRouteGeometry(
   return stops;
 }
 
+async function getCoachPositions(trainNumber: string, env: Env): Promise<string[]> {
+  const cacheKey = `coachPositions:${trainNumber}`;
+
+  if (env.RAILGAADI_CACHE) {
+    const cached = await env.RAILGAADI_CACHE.get<string[]>(cacheKey, 'json');
+    if (cached) return cached;
+  }
+
+  const upstream = await fetch(
+    `https://api.railradar.in/v1/trains/${encodeURIComponent(trainNumber)}`,
+    { headers: { Authorization: `Bearer ${env.RAILRADAR_API_KEY}` } },
+  );
+
+  if (!upstream.ok) return [];
+
+  const body: any = await upstream.json();
+  const raw = body.data?.train?.coachPosition as string | undefined;
+  const coaches = raw ? raw.split('-').filter(Boolean) : [];
+
+  if (env.RAILGAADI_CACHE && coaches.length) {
+    // Coach composition rarely changes — same long cache as route geometry.
+    await env.RAILGAADI_CACHE.put(cacheKey, JSON.stringify(coaches), {
+      expirationTtl: GEOMETRY_CACHE_TTL_SECONDS,
+    });
+  }
+
+  return coaches;
+}
+
 function buildPayload(
   trainNumber: string,
   raw: RailRadarLiveData,
@@ -272,8 +301,12 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   const body: any = await upstream.json();
   const raw: RailRadarLiveData = body.data ?? body;
-  const geometryStops = await getRouteGeometry(trainNumber, context.env);
-  const payload = buildPayload(trainNumber, raw, geometryStops);
+  const [geometryStops, coachPositions] = await Promise.all([
+    getRouteGeometry(trainNumber, context.env),
+    getCoachPositions(trainNumber, context.env),
+  ]);
+  const payload: any = buildPayload(trainNumber, raw, geometryStops);
+  payload.coachPositions = coachPositions;
 
   if (context.env.RAILGAADI_CACHE) {
     // 10-minute cache — RailRadar's free tier caps at 50 requests/day, so

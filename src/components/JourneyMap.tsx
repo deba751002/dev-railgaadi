@@ -181,17 +181,26 @@ export default function JourneyMap({ route, position, distanceCoveredKm }: Journ
 
     if (!markerRef.current) {
       const el = document.createElement('div');
-      el.style.width = '16px';
-      el.style.height = '16px';
+      el.style.width = '28px';
+      el.style.height = '28px';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
       el.style.borderRadius = '50%';
-      el.style.background = '#FFFFFF';
-      el.style.border = '3px solid #0A84FF';
-      el.style.boxShadow = '0 0 0 4px rgba(10,132,255,0.25)';
+      el.style.background = '#0A84FF';
+      el.style.boxShadow = '0 0 0 6px rgba(10,132,255,0.25), 0 2px 8px rgba(0,0,0,0.4)';
+      el.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${position.bearing}deg)">
+          <path d="M12 2L19 21L12 17L5 21L12 2Z" fill="#FFFFFF"/>
+        </svg>
+      `;
       markerRef.current = new maplibregl.Marker({ element: el })
         .setLngLat([position.lng, position.lat])
         .addTo(map);
     } else {
       markerRef.current.setLngLat([position.lng, position.lat]);
+      const svg = markerRef.current.getElement().querySelector('svg') as SVGElement | null;
+      if (svg) svg.style.transform = `rotate(${position.bearing}deg)`;
     }
   }, [position]);
 
