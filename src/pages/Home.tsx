@@ -15,7 +15,15 @@ export default function Home() {
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '48px 20px' }}>
-      <h1 style={{ textAlign: 'center', fontSize: 28, marginBottom: 24 }}>Dev RailGaadi</h1>
+      <h1 style={{ textAlign: 'center', fontSize: 28, marginBottom: 8 }}>Dev RailGaadi</h1>
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <span
+          onClick={() => navigate('/between')}
+          style={{ color: 'var(--accent-primary)', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+        >
+          Find trains between two stations →
+        </span>
+      </div>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <input
           className="search-bar"
