@@ -8,6 +8,7 @@ interface RailRadarLiveRouteStop {
   stationCode: string;
   stationName: string;
   distance: number;
+  isHalt?: boolean;
   scheduledArrival?: string;
   scheduledDeparture?: string;
   delayArrival?: number;
@@ -164,12 +165,24 @@ function buildPayload(
     .map((r) => {
       const geo = geometryByCode.get(r.stationCode);
       if (!geo) return null;
+      const haltMinutes =
+        r.scheduledArrival && r.scheduledDeparture
+          ? Math.round(
+              (new Date(r.scheduledDeparture).getTime() -
+                new Date(r.scheduledArrival).getTime()) /
+                60_000,
+            )
+          : null;
       return {
         stationCode: r.stationCode,
         stationName: r.stationName ?? geo.name,
         lat: geo.lat,
         lng: geo.lng,
         distanceKm: r.distance,
+        isHalt: r.isHalt ?? false,
+        arrivalTime: r.scheduledArrival ?? null,
+        departureTime: r.scheduledDeparture ?? null,
+        haltMinutes: haltMinutes !== null && haltMinutes > 0 ? haltMinutes : null,
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);

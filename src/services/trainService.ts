@@ -23,6 +23,10 @@ export interface JourneyResponse {
     lat: number;
     lng: number;
     distanceKm: number;
+    isHalt: boolean;
+    arrivalTime: string | null;
+    departureTime: string | null;
+    haltMinutes: number | null;
   }>;
 }
 
